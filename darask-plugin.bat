@@ -7,27 +7,57 @@ REM  for darask-paint's "AI shuufuku (IOpaint)" menu.
 REM
 REM  - First run: installs uv, creates a Python env, installs
 REM    PyTorch (CUDA 12.8 if an NVIDIA GPU is present, else CPU)
-REM    and the latest IOpaint release wheel from GitHub.
+REM    and IOpaint PINNED to the %PINNED_TAG% tag (git install --
+REM    requires git on PATH; NOT "latest", see below).
 REM    The env is shared with IOPaint-OneClick.bat
 REM    (%LOCALAPPDATA%\IOPaint) so nothing is installed twice.
-REM  - Later runs: starts the API server immediately.
+REM  - Later runs: if the installed iopaint version doesn't match
+REM    %PINNED_VERSION%, it is reinstalled to the pinned tag first.
 REM  - Server: http://127.0.0.1:8423 (local only, no browser UI
 REM    is opened; darask-paint talks to /api/v1/inpaint).
+REM  - Requires --darask-plugin-mode support (restricted: only
+REM    /api/v1/health + /api/v1/inpaint, no web UI/CORS/model-switch).
+REM    This script REFUSES to start if that isn't available --
+REM    there is no unrestricted-mode fallback.
+REM  - IMPORTANT: %PINNED_TAG% must exist as a pushed git tag on
+REM    https://github.com/%REPO% before this script's install step
+REM    can succeed. Push it once daraskme/IOpaint rc2 is cut.
 REM  Close this window to stop the plugin.
 REM ============================================================
 
 set "REPO=daraskme/IOpaint"
+set "PINNED_TAG=v2.0.0-rc2"
+set "PINNED_VERSION=2.0.0rc2"
 set "APPDIR=%LOCALAPPDATA%\IOPaint"
 set "VENV=%APPDIR%\env"
 set "IOPAINT_EXE=%VENV%\Scripts\iopaint.exe"
 set "PLUGIN_HOST=127.0.0.1"
 set "PLUGIN_PORT=8423"
 
-if exist "%IOPAINT_EXE%" goto :run
+if exist "%IOPAINT_EXE%" goto :check_version
+goto :first_time_setup
 
+:check_version
+set "INSTALLED_VERSION="
+for /f "usebackq delims=" %%v in (`"%IOPAINT_EXE%" --version 2^>nul`) do set "INSTALLED_VERSION=%%v"
+if "!INSTALLED_VERSION!"=="%PINNED_VERSION%" goto :run
+echo Installed IOpaint version is "!INSTALLED_VERSION!"; pinned version is %PINNED_VERSION%.
+echo Updating to the pinned version...
+echo.
+goto :install_iopaint
+
+:first_time_setup
 echo === darask-paint IOpaint plugin: first-time setup ===
 echo Install location: %APPDIR%
 echo.
+
+where git >nul 2>nul
+if not errorlevel 1 goto :have_git
+echo ERROR: git is required to install the pinned IOpaint version and was not
+echo        found on PATH. Install it from https://git-scm.com/downloads and
+echo        re-run this script.
+goto :fail
+:have_git
 
 where uv >nul 2>nul
 if not errorlevel 1 goto :have_uv
@@ -62,16 +92,21 @@ uv pip install --python "%VENV%" torch torchvision --torch-backend=cpu
 if errorlevel 1 goto :fail
 :torch_done
 
-echo [4/4] Downloading the latest IOpaint release...
-set "WHEEL_URL="
-for /f "usebackq delims=" %%u in (`powershell -NoProfile -Command "$r = Invoke-RestMethod 'https://api.github.com/repos/%REPO%/releases?per_page=5'; $a = $r | ForEach-Object assets | Where-Object name -like '*.whl' | Select-Object -First 1; $a.browser_download_url"`) do set "WHEEL_URL=%%u"
-if "!WHEEL_URL!"=="" (
-    echo ERROR: could not find a release wheel for %REPO%.
+echo [4/4] Installing IOpaint %PINNED_TAG% (pinned -- not "latest")...
+goto :install_iopaint
+
+:install_iopaint
+REM Pinned to a specific tag on purpose: --darask-plugin-mode's safety
+REM properties (CORS off, restricted routes, fixed model, DNS-rebinding
+REM guard) are a security boundary, so this launcher must not silently
+REM pick up whatever the newest tag happens to be.
+uv pip install --python "%VENV%" "git+https://github.com/%REPO%@%PINNED_TAG%"
+if errorlevel 1 (
+    echo ERROR: failed to install %REPO%@%PINNED_TAG%.
+    echo        Make sure that tag has been pushed to GitHub and that git is
+    echo        on PATH, then re-run this script.
     goto :fail
 )
-echo       !WHEEL_URL!
-uv pip install --python "%VENV%" "!WHEEL_URL!"
-if errorlevel 1 goto :fail
 
 echo.
 echo Setup finished successfully.
@@ -80,11 +115,34 @@ echo.
 :run
 where nvidia-smi >nul 2>nul
 if errorlevel 1 (set "DEVICE=cpu") else (set "DEVICE=cuda")
+
+REM --darask-plugin-mode is required, not optional: sanity-check that the
+REM pinned install actually has it before starting (belt-and-suspenders --
+REM the version pin above should already guarantee this). COLUMNS is
+REM widened for the probe because typer/rich truncates long option names
+REM (mid-string, e.g. "--darask-plugin-...") when --help's output isn't a
+REM real console (as is the case once piped into findstr), which would
+REM otherwise make this check always miss even on a supporting install.
+set "PLUGIN_MODE_FLAG="
+set "COLUMNS=300"
+"%IOPAINT_EXE%" start --help 2>nul | findstr /C:"--darask-plugin-mode" >nul
+if not errorlevel 1 set "PLUGIN_MODE_FLAG=--darask-plugin-mode"
+set "COLUMNS="
+if "!PLUGIN_MODE_FLAG!"=="" (
+    echo ERROR: installed IOpaint ^(pinned %PINNED_TAG%^) does not expose
+    echo        --darask-plugin-mode. This launcher refuses to start in the
+    echo        unrestricted normal mode, since that would expose the web UI,
+    echo        CORS and model-switching APIs on this port.
+    echo        Delete "%VENV%" and re-run this script to reinstall from
+    echo        scratch, or report this at https://github.com/%REPO%/issues.
+    goto :fail
+)
+
 echo Starting darask-paint IOpaint plugin (device: !DEVICE!).
 echo Server: http://%PLUGIN_HOST%:%PLUGIN_PORT%  (darask-paint: "AI shuufuku (IOpaint)" menu)
 echo The first run downloads the LaMa model (~200MB).
 echo Close this window to stop the plugin.
-"%IOPAINT_EXE%" start --model lama --device !DEVICE! --host %PLUGIN_HOST% --port %PLUGIN_PORT%
+"%IOPAINT_EXE%" start --model lama --device !DEVICE! --host %PLUGIN_HOST% --port %PLUGIN_PORT% !PLUGIN_MODE_FLAG!
 goto :eof
 
 :fail
