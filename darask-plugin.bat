@@ -34,6 +34,7 @@ set "PINNED_VERSION=2.0.0rc2"
 set "APPDIR=%LOCALAPPDATA%\IOPaint"
 set "VENV=%APPDIR%\env"
 set "IOPAINT_EXE=%VENV%\Scripts\iopaint.exe"
+set "PYTHON_EXE=%VENV%\Scripts\python.exe"
 set "DISTINFO=%VENV%\Lib\site-packages\iopaint-%PINNED_VERSION%.dist-info"
 set "PROBE_MARKER=%VENV%\darask-plugin-probe-ok.txt"
 set "PLUGIN_HOST=127.0.0.1"
@@ -63,7 +64,7 @@ if not "!RECORD_STAMP!"=="" if "!PROBE_STAMP!"=="!RECORD_STAMP!" (
 
 :check_version_slow
 set "INSTALLED_VERSION="
-for /f "usebackq delims=" %%v in (`"%IOPAINT_EXE%" --version 2^>nul`) do set "INSTALLED_VERSION=%%v"
+for /f "usebackq delims=" %%v in (`call "%PYTHON_EXE%" -I -c "from importlib.metadata import version; print(version('iopaint'))" 2^>nul`) do set "INSTALLED_VERSION=%%v"
 if "!INSTALLED_VERSION!"=="%PINNED_VERSION%" goto :run
 echo Installed IOpaint version is "!INSTALLED_VERSION!"; pinned version is %PINNED_VERSION%.
 echo Updating to the pinned version...
