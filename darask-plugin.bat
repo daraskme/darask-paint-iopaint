@@ -13,6 +13,9 @@ REM    The env is shared with IOPaint-OneClick.bat
 REM    (%LOCALAPPDATA%\IOPaint) so nothing is installed twice.
 REM  - Later runs: if the installed iopaint version doesn't match
 REM    %PINNED_VERSION%, it is reinstalled to the pinned tag first.
+REM    Warm starts skip the two slow "iopaint ..." probes (each one
+REM    imports iopaint/torch) when the pinned dist-info is present and
+REM    its RECORD file is unchanged since the last successful probe.
 REM  - Server: http://127.0.0.1:8423 (local only, no browser UI
 REM    is opened; darask-paint talks to /api/v1/inpaint).
 REM  - Requires --darask-plugin-mode support (restricted: only
@@ -31,13 +34,34 @@ set "PINNED_VERSION=2.0.0rc2"
 set "APPDIR=%LOCALAPPDATA%\IOPaint"
 set "VENV=%APPDIR%\env"
 set "IOPAINT_EXE=%VENV%\Scripts\iopaint.exe"
+set "DISTINFO=%VENV%\Lib\site-packages\iopaint-%PINNED_VERSION%.dist-info"
+set "PROBE_MARKER=%VENV%\darask-plugin-probe-ok.txt"
 set "PLUGIN_HOST=127.0.0.1"
 set "PLUGIN_PORT=8423"
+set "PLUGIN_MODE_FLAG="
 
 if exist "%IOPAINT_EXE%" goto :check_version
 goto :first_time_setup
 
 :check_version
+REM Fast path (warm start): the installer writes exactly one
+REM iopaint-<version>.dist-info, so its presence for %PINNED_VERSION% is
+REM equivalent to "iopaint --version" without importing the package. The
+REM --darask-plugin-mode probe result is reused only while that install's
+REM RECORD file (rewritten by every (re)install) is byte-for-byte the same
+REM size/timestamp it had when the probe last succeeded; anything else
+REM falls through to the full checks below.
+if not exist "%DISTINFO%\RECORD" goto :check_version_slow
+set "RECORD_STAMP="
+for %%f in ("%DISTINFO%\RECORD") do set "RECORD_STAMP=%%~tf %%~zf"
+set "PROBE_STAMP="
+if exist "%PROBE_MARKER%" set /p PROBE_STAMP=<"%PROBE_MARKER%"
+if not "!RECORD_STAMP!"=="" if "!PROBE_STAMP!"=="!RECORD_STAMP!" (
+    set "PLUGIN_MODE_FLAG=--darask-plugin-mode"
+    goto :run
+)
+
+:check_version_slow
 set "INSTALLED_VERSION="
 for /f "usebackq delims=" %%v in (`"%IOPAINT_EXE%" --version 2^>nul`) do set "INSTALLED_VERSION=%%v"
 if "!INSTALLED_VERSION!"=="%PINNED_VERSION%" goto :run
@@ -116,6 +140,8 @@ echo.
 where nvidia-smi >nul 2>nul
 if errorlevel 1 (set "DEVICE=cpu") else (set "DEVICE=cuda")
 
+if not "!PLUGIN_MODE_FLAG!"=="" goto :probe_done
+
 REM --darask-plugin-mode is required, not optional: sanity-check that the
 REM pinned install actually has it before starting (belt-and-suspenders --
 REM the version pin above should already guarantee this). COLUMNS is
@@ -137,6 +163,10 @@ if "!PLUGIN_MODE_FLAG!"=="" (
     echo        scratch, or report this at https://github.com/%REPO%/issues.
     goto :fail
 )
+if exist "%DISTINFO%\RECORD" (
+    for %%f in ("%DISTINFO%\RECORD") do >"%PROBE_MARKER%" echo %%~tf %%~zf
+)
+:probe_done
 
 echo Starting darask-paint IOpaint plugin (device: !DEVICE!).
 echo Server: http://%PLUGIN_HOST%:%PLUGIN_PORT%  (darask-paint: "AI shuufuku (IOpaint)" menu)
