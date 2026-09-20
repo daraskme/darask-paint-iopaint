@@ -22,8 +22,10 @@ jobs:
         with:
           python-version: '3.12'
 
+      # test-launcher.ps1 は Add-Type -OutputType ConsoleApplication で uv スタブを
+      # 作るため Windows PowerShell 5.1 が必要(pwsh 7 では未サポート)。
       - name: Launcher tests
-        shell: pwsh
+        shell: powershell
         run: ./tests/test-launcher.ps1
 
       - name: Build plugin zip
