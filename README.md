@@ -26,7 +26,39 @@ Darask Paint がアクティブレイヤーの選択範囲だけに書き戻し(
 
 Darask Paint 本体は依存を増やさず高速起動のまま。AI はこのプラグインを起動したときだけ使えます。
 
-## 使い方
+## 使い方(推奨: zip を置くだけ)
+
+1. [Releases](https://github.com/daraskme/darask-paint-iopaint/releases) から
+   `darask-paint-iopaint-plugin-vX.Y.Z.zip` をダウンロード
+2. `darask-paint.exe` と同じ階層に `plugins` フォルダを作り、zip を**そのまま**置く
+   (展開不要。設定ダイアログ(Ctrl+K)の「プラグインフォルダ」で別の場所を指定することもできます)
+   ```
+   darask-paint.exe
+   plugins\
+     darask-paint-iopaint-plugin-v1.0.0.zip
+   ```
+3. Darask Paint で修復したい範囲を選択し、メニューの「**AI 修復(IOpaint)…**」を実行
+   - 本体が zip を `plugins\darask-paint-iopaint-plugin-v1.0.0\` に展開し、`darask-plugin.bat` を
+     新しいコンソール窓で起動して、サーバが応答するまで(最大 2 分)待ちます
+   - 初回は下記のインストール(数分)が走るため 2 分を超えることがあります。その場合は
+     「起動中」のメッセージが出るので、コンソールのインストール完了後にもう一度実行してください
+   - zip を新しいバージョンに差し替えると、次回実行時に自動で再展開されます
+4. プラグインの黒い窓を閉じればサーバ停止(Darask Paint 本体はプラグインなしでも全機能動作)
+
+### 動作例(Windows, CPU のみ)
+
+| `plugins` フォルダに zip を置く | 初回セットアップの黒い窓(CPU 版 PyTorch を自動選択) |
+|---|---|
+| ![plugins フォルダの zip](docs/images/plugins-folder.png) | ![初回セットアップのコンソール](docs/images/plugin-console.png) |
+
+| 修復前: 選択範囲内の黒線 | 修復後: 選択範囲内だけ消え、選択外の線は保持 |
+|---|---|
+| ![修復前](docs/images/repair-before.png) | ![修復後](docs/images/repair-after.png) |
+
+zip を自分で作る場合は `pwsh ./package-plugin.ps1 -Version plugin-vX.Y.Z` を実行します
+(`plugin-v*` タグを push すると GitHub Actions が同じ zip を Release に添付します)。
+
+## 使い方(手動起動)
 
 1. `darask-plugin.bat` をダブルクリック
    - 初回のみ: [git](https://git-scm.com/downloads)(`git+https://` インストールに必須)が
