@@ -15,7 +15,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
-$files = @("darask-plugin.bat", "darask-plugin.json", "README.md", "LICENSE")
+$files = @("darask-plugin.sh", "flake.nix", "flake.lock", "darask-plugin.bat", "darask-plugin.json", "README.md", "LICENSE")
 foreach ($file in $files) {
     if (-not (Test-Path (Join-Path $root $file))) { throw "missing $file" }
 }
