@@ -15,5 +15,6 @@
     "repository": "https://github.com/daraskme/IOpaint",
     "upstream": "https://github.com/Sanster/IOPaint",
     "license": "Apache-2.0"
-  }
+  },
+  "launcherLinux": "darask-plugin.sh"
 }
