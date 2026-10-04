@@ -1,1 +1,4 @@
 dist/
+
+# Nix build outputs
+/result*
